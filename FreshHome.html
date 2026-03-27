@@ -1,0 +1,1348 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="FreshHome" />
+  <meta name="theme-color" content="#3d7a5a" />
+  <title>FreshHome 🥦</title>
+  <link rel="manifest" href="manifest.json" />
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #f7f5f0; }
+    #root { max-width: 480px; margin: 0 auto; min-height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script>
+
+// ── Supabase Storage Adapter ──────────────────────────────────────────────────
+const SUPABASE_URL = 'https://teyihnnrsuhdbhrknfza.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_EQ3FGXaZssgN1Ebo9Fn7xw_POeUHo2n';
+const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Simple key-value store using freshhome_kv table
+window.storage = {
+  get: async (key) => {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/freshhome_kv?key=eq.${encodeURIComponent(key)}&select=value`,
+      { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Accept': 'application/json' } }
+    );
+    if (!res.ok) throw new Error('not found');
+    const data = await res.json();
+    if (!data.length) throw new Error('not found');
+    return { key, value: data[0].value };
+  },
+  set: async (key, value) => {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/freshhome_kv`,
+      {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Prefer': 'resolution=merge-duplicates'
+        },
+        body: JSON.stringify({ key, value, updated_at: new Date().toISOString() })
+      }
+    );
+    if (!res.ok) throw new Error('save failed');
+    return { key, value };
+  },
+  delete: async (key) => {
+    await fetch(
+      `${SUPABASE_URL}/rest/v1/freshhome_kv?key=eq.${encodeURIComponent(key)}`,
+      { method: 'DELETE', headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
+    );
+    return { key, deleted: true };
+  }
+};
+// ──────────────────────────────────────────────────────────────────────────────
+
+var useState = React.useState;
+var useEffect = React.useEffect;
+var useRef = React.useRef;
+const CATEGORIES = ["Lácteos", "Verduras", "Carne/Pescado", "Bebidas", "Limpieza", "Básicos", "Otros"];
+const CAT_ICONS = {
+  "Lácteos": "🥛",
+  "Verduras": "🥦",
+  "Carne/Pescado": "🥩",
+  "Bebidas": "🧃",
+  "Limpieza": "🧹",
+  "Básicos": "🌾",
+  "Otros": "📦"
+};
+const CAT_COLORS = {
+  "Lácteos": "#e8f5e9",
+  "Verduras": "#f1f8e9",
+  "Carne/Pescado": "#fce4ec",
+  "Bebidas": "#e3f2fd",
+  "Limpieza": "#f3e5f5",
+  "Básicos": "#fff8e1",
+  "Otros": "#f5f5f5"
+};
+const SUPERMARKETS = ["bonÀrea", "Mercadona", "Lidl", "Aldi", "Caprabo", "Bon Preu", "El Corte Inglés", "Otro"];
+const DEMO_ITEMS = [{
+  id: "1",
+  name: "Leche",
+  category: "Lácteos",
+  unit: "L",
+  min_stock: 3,
+  current_stock: 1
+}, {
+  id: "2",
+  name: "Yogures",
+  category: "Lácteos",
+  unit: "ud",
+  min_stock: 6,
+  current_stock: 4
+}, {
+  id: "3",
+  name: "Huevos",
+  category: "Lácteos",
+  unit: "ud",
+  min_stock: 12,
+  current_stock: 2
+}, {
+  id: "4",
+  name: "Tomates",
+  category: "Verduras",
+  unit: "kg",
+  min_stock: 1,
+  current_stock: 0.5
+}, {
+  id: "5",
+  name: "Lechuga",
+  category: "Verduras",
+  unit: "ud",
+  min_stock: 1,
+  current_stock: 0
+}, {
+  id: "6",
+  name: "Pechuga pollo",
+  category: "Carne/Pescado",
+  unit: "kg",
+  min_stock: 1,
+  current_stock: 0
+}, {
+  id: "7",
+  name: "Agua",
+  category: "Bebidas",
+  unit: "L",
+  min_stock: 10,
+  current_stock: 3
+}, {
+  id: "8",
+  name: "Detergente",
+  category: "Limpieza",
+  unit: "ud",
+  min_stock: 1,
+  current_stock: 0
+}, {
+  id: "9",
+  name: "Papel higiénico",
+  category: "Limpieza",
+  unit: "ud",
+  min_stock: 6,
+  current_stock: 2
+}, {
+  id: "10",
+  name: "Pasta",
+  category: "Básicos",
+  unit: "kg",
+  min_stock: 1,
+  current_stock: 1
+}, {
+  id: "11",
+  name: "Arroz",
+  category: "Básicos",
+  unit: "kg",
+  min_stock: 1,
+  current_stock: 1
+}];
+const genId = () => Math.random().toString(36).slice(2, 10);
+
+// ─── TICKET PARSER ────────────────────────────────────────────────────────────
+// Detecta líneas de producto: texto seguido de precio (con o sin % IVA)
+// Ignora cabeceras, totales, separadores, info de pago, etc.
+
+const IGNORE_PATTERNS = [/^-{3,}/, /^\*{3,}/, /^={3,}/,
+// separadores
+/^(iva|tipo|base|cuota|total|subtotal|cambio|pago|importe|unidades|numero|factura|nif|tel|cif|c\/|http|www|atendido|establecimiento|fil|operacion|tarjeta|autorizacion|comercio|terminal|acumula|del |cada |2627|gracias|no se|caducidad|autorizo|fecha|bolsa.*%|n[uú]mero|ticket)/i, /^descripci/i, /^desglose/i,
+// cabeceras
+/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}/,
+// fechas
+/^[a-z0-9\s]{0,6}:\s/i // etiquetas tipo "Tel: xxx"
+];
+function parseTicket(text) {
+  const lines = text.split("\n").map(l => l.trim()).filter(l => l.length > 3);
+  const results = [];
+  for (const line of lines) {
+    if (IGNORE_PATTERNS.some(p => p.test(line))) continue;
+
+    // Patrón 1 — cantidad múltiple: "PIZZA M 250 4 A 1,99 7,96 10,0"
+    // Formato: NOMBRE qty LETRA precio subtotal IVA
+    let m = line.match(/^(.+?)\s+(\d+)\s+[A-Z]\s+(\d{1,3}[,\.]\d{2})\s+\d{1,3}[,\.]\d{2}\s+\d+[,\.]?\d*\s*$/);
+    if (m) {
+      const name = m[1].trim();
+      const qty = m[2];
+      const priceStr = m[3];
+      const price = parseFloat(priceStr.replace(",", "."));
+      if (name.length >= 3 && price > 0 && price < 300 && !/^\d/.test(name)) {
+        const cleanName = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+        results.push({
+          name: cleanName,
+          price: priceStr.replace(",", "."),
+          qty: parseInt(qty)
+        });
+      }
+      continue;
+    }
+
+    // Patrón 2 — estándar: "NOMBRE precio IVA" o "NOMBRE precio"
+    m = line.match(/^(.+?)\s+(\d{1,3}[,\.]\d{2})\s+\d{1,2}[,\.]?\d*\s*$/);
+    if (!m) m = line.match(/^(.+?)\s+(\d{1,3}[,\.]\d{2})\s*(?:[A-Za-z*].*)?$/);
+    if (m) {
+      const name = m[1].trim();
+      const priceStr = m[2];
+      const price = parseFloat(priceStr.replace(",", "."));
+      if (name.length >= 3 && price > 0 && price < 300 && !/^\d/.test(name)) {
+        const cleanName = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+        results.push({
+          name: cleanName,
+          price: priceStr.replace(",", "."),
+          qty: 1
+        });
+      }
+    }
+  }
+  return results;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+const styles = `
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;0,600;1,300&family=DM+Sans:wght@300;400;500&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --green: #3d7a5a; --green-light: #e8f2ed; --green-mid: #6aab87;
+    --cream: #f7f5f0; --cream-dark: #ede9e1; --text: #2c2c2c; --text-soft: #7a7a7a;
+    --red: #c0392b; --red-light: #fdecea; --shadow: 0 2px 12px rgba(0,0,0,0.08); --radius: 16px;
+  }
+  body { font-family: 'DM Sans', sans-serif; background: var(--cream); }
+  .app { max-width: 480px; margin: 0 auto; min-height: 100vh; background: var(--cream); position: relative; padding-bottom: 90px; }
+  .header { background: var(--green); padding: 20px 20px 14px; position: sticky; top: 0; z-index: 100; }
+  .header-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .app-title { font-family: 'Fraunces', serif; font-size: 24px; color: white; font-weight: 300; letter-spacing: -0.5px; }
+  .app-title span { font-style: italic; color: #a8d5bc; }
+  .header-actions { display: flex; gap: 8px; }
+  .btn-icon { background: rgba(255,255,255,0.15); border: none; color: white; width: 34px; height: 34px; border-radius: 10px; cursor: pointer; font-size: 15px; display: flex; align-items: center; justify-content: center; }
+  .alert-banner { background: var(--red-light); border: 1px solid #f5c6c2; border-radius: 10px; padding: 9px 12px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--red); cursor: pointer; }
+  .tabs { display: flex; background: rgba(255,255,255,0.12); border-radius: 10px; padding: 3px; gap: 2px; }
+  .tab { flex: 1; padding: 7px 4px; border: none; background: transparent; color: rgba(255,255,255,0.65); font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 500; cursor: pointer; border-radius: 8px; transition: all 0.2s; white-space: nowrap; }
+  .tab.active { background: white; color: var(--green); }
+  .content { padding: 16px; }
+  .despensa-actions { display: flex; gap: 8px; margin-bottom: 16px; }
+  .btn-import { flex: 1; background: white; border: 1.5px solid var(--green-mid); color: var(--green); padding: 10px; border-radius: 12px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .category-section { margin-bottom: 20px; }
+  .category-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding: 0 4px; }
+  .category-name { font-family: 'Fraunces', serif; font-size: 15px; color: var(--text); font-weight: 400; }
+  .category-count { margin-left: auto; font-size: 11px; color: var(--text-soft); background: var(--cream-dark); padding: 2px 8px; border-radius: 20px; }
+  .item-card { background: white; border-radius: var(--radius); padding: 12px 14px; margin-bottom: 8px; box-shadow: var(--shadow); animation: fadeIn 0.25s ease; }
+  .item-card.low { border-left: 3px solid var(--red); }
+  .item-card.ok { border-left: 3px solid var(--green-mid); }
+  .item-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .item-name { font-size: 14px; font-weight: 500; color: var(--text); flex: 1; }
+  .item-badges { display: flex; align-items: center; gap: 6px; }
+  .item-stock-badge { font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 500; }
+  .badge-low { background: var(--red-light); color: var(--red); }
+  .badge-ok { background: var(--green-light); color: var(--green); }
+  .btn-quick-delete { background: none; border: none; color: #ddd; cursor: pointer; font-size: 14px; padding: 2px 4px; line-height: 1; transition: color 0.2s; }
+  .btn-quick-delete:hover { color: var(--red); }
+  .item-bottom { display: flex; align-items: center; gap: 8px; }
+  .stock-bar-wrap { flex: 1; height: 5px; background: var(--cream-dark); border-radius: 3px; overflow: hidden; }
+  .stock-bar { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+  .bar-low { background: linear-gradient(90deg, #e74c3c, #c0392b); }
+  .bar-ok { background: linear-gradient(90deg, #6aab87, #3d7a5a); }
+  .stock-controls { display: flex; align-items: center; gap: 6px; }
+  .btn-stock { width: 28px; height: 28px; border-radius: 8px; border: none; cursor: pointer; font-size: 17px; font-weight: 600; display: flex; align-items: center; justify-content: center; line-height: 1; }
+  .btn-minus { background: var(--cream-dark); color: var(--text); }
+  .btn-plus { background: var(--green); color: white; }
+  .stock-value { font-size: 12px; font-weight: 500; color: var(--text); min-width: 42px; text-align: center; }
+  .btn-edit-item { background: none; border: none; color: var(--text-soft); cursor: pointer; font-size: 13px; padding: 3px 5px; }
+  .shopping-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .shopping-title { font-family: 'Fraunces', serif; font-size: 19px; font-weight: 400; color: var(--text); }
+  .btn-clear { background: var(--cream-dark); border: none; color: var(--text-soft); font-size: 12px; padding: 5px 10px; border-radius: 8px; cursor: pointer; font-family: 'DM Sans', sans-serif; }
+  .btn-gen { width: 100%; background: var(--green); color: white; border: none; padding: 13px; border-radius: 12px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; margin-bottom: 14px; }
+  .shopping-item { background: white; border-radius: var(--radius); padding: 12px 14px; margin-bottom: 8px; box-shadow: var(--shadow); display: flex; align-items: center; gap: 12px; animation: fadeIn 0.25s ease; transition: opacity 0.2s; }
+  .shopping-item.checked { opacity: 0.4; }
+  .shop-check { width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--green-mid); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.2s; font-size: 12px; font-weight: 700; }
+  .shop-check.checked-box { background: var(--green); border-color: var(--green); color: white; }
+  .shop-info { flex: 1; }
+  .shop-name { font-size: 14px; font-weight: 500; color: var(--text); }
+  .shop-name.crossed { text-decoration: line-through; color: var(--text-soft); }
+  .shop-qty { font-size: 11px; color: var(--text-soft); margin-top: 2px; }
+  .shop-cat { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 500; white-space: nowrap; }
+  .prices-header { margin-bottom: 16px; }
+  .prices-title { font-family: 'Fraunces', serif; font-size: 19px; font-weight: 400; color: var(--text); margin-bottom: 12px; }
+  .btn-add-ticket { width: 100%; background: var(--green); color: white; border: none; padding: 13px; border-radius: 12px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; margin-bottom: 12px; }
+  .price-search { width: 100%; padding: 11px 14px; border: 1.5px solid var(--cream-dark); border-radius: 10px; font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--text); background: white; outline: none; margin-bottom: 14px; }
+  .price-search:focus { border-color: var(--green); }
+  .price-product { background: white; border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px; box-shadow: var(--shadow); }
+  .price-product-name { font-size: 14px; font-weight: 500; color: var(--text); margin-bottom: 10px; }
+  .price-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--cream-dark); gap: 8px; }
+  .price-row:last-child { border-bottom: none; }
+  .price-supermarket { font-size: 13px; color: var(--text); flex: 1; }
+  .price-right { display: flex; align-items: center; gap: 6px; }
+  .price-amount { font-size: 14px; font-weight: 600; }
+  .price-amount.best { color: var(--green); }
+  .price-amount.worst { color: var(--text-soft); }
+  .price-date { font-size: 10px; color: var(--text-soft); }
+  .price-badge-best { font-size: 9px; background: var(--green-light); color: var(--green); padding: 2px 5px; border-radius: 5px; font-weight: 700; }
+  .empty-state { text-align: center; padding: 48px 24px; color: var(--text-soft); }
+  .empty-icon { font-size: 48px; margin-bottom: 10px; }
+  .empty-title { font-family: 'Fraunces', serif; font-size: 17px; color: var(--text); margin-bottom: 8px; }
+  .empty-sub { font-size: 13px; line-height: 1.6; }
+  .fab { position: fixed; bottom: 24px; right: 24px; width: 52px; height: 52px; background: var(--green); color: white; border: none; border-radius: 16px; font-size: 22px; cursor: pointer; box-shadow: 0 4px 20px rgba(61,122,90,0.45); display: flex; align-items: center; justify-content: center; z-index: 200; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 300; display: flex; align-items: flex-end; animation: fadeIn 0.2s ease; }
+  .modal { background: white; border-radius: 24px 24px 0 0; padding: 24px 20px 36px; width: 100%; max-width: 480px; margin: 0 auto; animation: slideUp 0.28s ease; max-height: 92vh; overflow-y: auto; }
+  .modal-title { font-family: 'Fraunces', serif; font-size: 19px; font-weight: 400; margin-bottom: 18px; color: var(--text); }
+  .form-group { margin-bottom: 13px; position: relative; }
+  .form-label { font-size: 11px; font-weight: 500; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 5px; display: block; }
+  .form-input, .form-select, .form-textarea { width: 100%; padding: 11px 13px; border: 1.5px solid var(--cream-dark); border-radius: 10px; font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--text); background: white; outline: none; -webkit-appearance: none; }
+  .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--green); }
+  .form-textarea { resize: vertical; min-height: 110px; font-size: 12px; line-height: 1.5; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+  .btn-cancel { flex: 1; padding: 12px; border: 1.5px solid var(--cream-dark); background: white; color: var(--text-soft); border-radius: 12px; font-family: 'DM Sans', sans-serif; font-size: 13px; cursor: pointer; }
+  .btn-save { flex: 2; padding: 12px; background: var(--green); color: white; border: none; border-radius: 12px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .btn-delete { padding: 12px 14px; background: var(--red-light); color: var(--red); border: none; border-radius: 12px; font-size: 15px; cursor: pointer; }
+  .modal-hint { font-size: 12px; color: var(--text-soft); margin-bottom: 8px; line-height: 1.5; }
+  .autocomplete-list { position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1.5px solid var(--green-mid); border-radius: 10px; z-index: 10; box-shadow: var(--shadow); max-height: 150px; overflow-y: auto; margin-top: 2px; }
+  .autocomplete-item { padding: 10px 13px; font-size: 13px; cursor: pointer; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .autocomplete-item:hover { background: var(--green-light); }
+  .autocomplete-item + .autocomplete-item { border-top: 1px solid var(--cream-dark); }
+
+  /* TICKET PARSER UI */
+  .parsed-preview { background: var(--cream); border-radius: 12px; padding: 12px; margin-top: 8px; max-height: 220px; overflow-y: auto; }
+  .parsed-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .parsed-name { flex: 2; font-size: 13px; color: var(--text); background: white; border: 1.5px solid var(--cream-dark); border-radius: 8px; padding: 7px 10px; outline: none; font-family: 'DM Sans', sans-serif; }
+  .parsed-price { flex: 1; font-size: 13px; color: var(--text); background: white; border: 1.5px solid var(--cream-dark); border-radius: 8px; padding: 7px 10px; outline: none; font-family: 'DM Sans', sans-serif; }
+  .parsed-name:focus, .parsed-price:focus { border-color: var(--green); }
+  .btn-remove-row { background: var(--red-light); border: none; color: var(--red); width: 26px; height: 26px; border-radius: 6px; cursor: pointer; font-size: 13px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .btn-add-row { background: var(--green-light); border: none; color: var(--green); padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 500; font-family: 'DM Sans', sans-serif; margin-top: 4px; }
+  .parse-count { font-size: 12px; color: var(--green); font-weight: 500; margin-top: 6px; }
+  .import-parsed { background: var(--green-light); border-radius: 10px; padding: 10px 12px; margin-top: 8px; font-size: 13px; color: var(--green); line-height: 1.7; }
+  .section-sep { height: 1px; background: var(--cream-dark); margin: 14px 0; }
+  .loading { display: flex; align-items: center; justify-content: center; height: 200px; flex-direction: column; gap: 12px; color: var(--text-soft); }
+  .spinner { width: 30px; height: 30px; border: 3px solid var(--cream-dark); border-top-color: var(--green); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  .toast { position: fixed; bottom: 88px; left: 50%; transform: translateX(-50%); background: #1a1a1a; color: white; padding: 9px 20px; border-radius: 20px; font-size: 13px; z-index: 500; animation: fadeIn 0.2s ease; white-space: nowrap; pointer-events: none; }
+  .shop-view-toggle { display: flex; gap: 6px; margin-bottom: 14px; }
+  .shop-view-btn { flex: 1; padding: 9px; border: 1.5px solid var(--cream-dark); background: white; color: var(--text-soft); border-radius: 10px; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+  .shop-view-btn.active { background: var(--green); color: white; border-color: var(--green); }
+  .shop-best-price { color: var(--green); font-weight: 500; font-size: 11px; }
+  .super-group { margin-bottom: 16px; }
+  .super-group-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 4px; margin-bottom: 8px; border-bottom: 2px solid var(--green-light); }
+  .super-group-name { font-family: 'Fraunces', serif; font-size: 15px; color: var(--text); font-weight: 400; }
+  .super-group-total { font-size: 13px; font-weight: 600; color: var(--green); background: var(--green-light); padding: 3px 10px; border-radius: 20px; }
+  .btn-photo-upload { display: block; width: 100%; padding: 13px; background: var(--green); color: white; border-radius: 12px; font-family: "DM Sans", sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; text-align: center; margin-bottom: 10px; }
+  .photo-or { text-align: center; font-size: 12px; color: var(--text-soft); margin: 8px 0; }
+  .shop-live-price { display: flex; align-items: center; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+  .shop-live-super { font-size: 11px; color: var(--text-soft); }
+  .shop-live-amount { font-size: 14px; font-weight: 700; color: var(--green); }
+  .shop-live-offer { font-size: 10px; color: var(--red); background: var(--red-light); padding: 1px 6px; border-radius: 6px; }
+  .shop-live-loading { font-size: 10px; color: var(--text-soft); }
+  .live-search-wrap { margin-bottom: 8px; }
+  .live-results { background: white; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); overflow: hidden; margin-top: 8px; margin-bottom: 4px; }
+  .live-row { display: flex; align-items: center; justify-content: space-between; padding: 11px 14px; border-bottom: 1px solid var(--cream-dark); gap: 10px; }
+  .live-row:last-child { border-bottom: none; }
+  .live-product { flex: 1; min-width: 0; }
+  .live-name { font-size: 13px; font-weight: 500; color: var(--text); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .live-promo { font-size: 11px; color: var(--red); display: block; margin-top: 2px; }
+  .live-right { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
+  .live-super { font-size: 11px; color: var(--text-soft); }
+  .live-price { font-size: 16px; font-weight: 700; color: var(--text); }
+  .live-best .live-price, .live-price.live-best { color: var(--green); }
+  .live-best.live-super { color: var(--green); font-weight: 600; }
+  .live-loading { font-size: 12px; color: var(--text-soft); padding: 8px 0; text-align: center; animation: fadeIn 0.2s; }
+  .prices-sep { height: 1px; background: var(--cream-dark); margin: 16px 0; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes slideUp { from { transform: translateY(60px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+`;
+function FreshHome() {
+  const [tab, setTab] = useState("despensa");
+  const [items, setItems] = useState([]);
+  const [shopping, setShopping] = useState([]);
+  const [prices, setPrices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [modal, setModal] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [form, setForm] = useState({
+    name: "",
+    category: "Otros",
+    unit: "ud",
+    min_stock: 1,
+    current_stock: 0
+  });
+  const [autocomplete, setAutocomplete] = useState([]);
+  const [showAuto, setShowAuto] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importParsed, setImportParsed] = useState([]);
+  const [priceSearch, setPriceSearch] = useState("");
+  const [ticketSupermarket, setTicketSupermarket] = useState("bonÀrea");
+  const [ticketText, setTicketText] = useState("");
+  const [ticketParsed, setTicketParsed] = useState([]);
+  const [shopView, setShopView] = useState("lista"); // "lista" | "supermercado"
+  const [liveSearch, setLiveSearch] = useState("");
+  const [liveResults, setLiveResults] = useState([]);
+  const [liveLoading, setLiveLoading] = useState(false);
+  const [livePriceCache, setLivePriceCache] = useState({});
+  const [photoLoading, setPhotoLoading] = useState(false); // {productName: {super, price, promo}}
+
+  const searchLive = async (q) => {
+    if (!q.trim()) { setLiveResults([]); return; }
+    setLiveLoading(true);
+    try {
+      const res = await fetch(`${WORKER_URL}?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      setLiveResults(data.results || []);
+    } catch (e) {
+      setLiveResults([]);
+    } finally {
+      setLiveLoading(false);
+    }
+  };
+
+  const analyzePhoto = async (file) => {
+    setPhotoLoading(true);
+    try {
+      const base64 = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result.split(',')[1]);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+      const mediaType = file.type || 'image/jpeg';
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': ANTHROPIC_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-opus-4-5',
+          max_tokens: 1024,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+              { type: 'text', text: 'Analiza este tiquet de supermercado. Extrae SOLO los productos comprados con su precio unitario. Ignora totales, IVA, datos del establecimiento y métodos de pago. Responde ÚNICAMENTE con JSON válido, sin texto adicional, en este formato exacto: [{"name":"nombre producto","price":"1.23"}]. Si un producto aparece varias veces con distinto precio, ponlo una sola vez con el precio unitario.' }
+            ]
+          }]
+        })
+      });
+      const data = await response.json();
+      const text = data.content?.[0]?.text || '[]';
+      const clean = text.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(clean);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        setTicketParsed(parsed.map(p => ({ id: Math.random().toString(36).slice(2), name: p.name, price: p.price })));
+        showToast(parsed.length + ' productos detectados ✓');
+      } else {
+        showToast('No se detectaron productos');
+      }
+    } catch (e) {
+      showToast('Error al analizar la foto');
+    } finally {
+      setPhotoLoading(false);
+    }
+  };
+
+  const fetchLivePriceForItem = async (itemName) => {
+    if (!itemName || livePriceCache[itemName] !== undefined) return;
+    // Mark as loading
+    setLivePriceCache(prev => ({ ...prev, [itemName]: null }));
+    try {
+      const res = await fetch(`${WORKER_URL}?q=${encodeURIComponent(itemName)}`);
+      const data = await res.json();
+      const best = (data.results || [])[0] || null;
+      setLivePriceCache(prev => ({ ...prev, [itemName]: best }));
+    } catch (e) {
+      setLivePriceCache(prev => ({ ...prev, [itemName]: null }));
+    }
+  };
+
+  const showToast = msg => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2200);
+  };
+  useEffect(() => {
+    const load = async () => {
+      try {
+        let its = DEMO_ITEMS,
+          shop = [],
+          prc = [];
+        try {
+          const r = await window.storage.get("fh-items");
+          if (r) its = JSON.parse(r.value);
+        } catch {}
+        try {
+          const r = await window.storage.get("fh-shopping");
+          if (r) shop = JSON.parse(r.value);
+        } catch {}
+        try {
+          const r = await window.storage.get("fh-prices");
+          if (r) prc = JSON.parse(r.value);
+        } catch {}
+        setItems(its);
+        setShopping(shop);
+        setPrices(prc);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
+  const saveItems = async v => {
+    setItems(v);
+    try {
+      await window.storage.set("fh-items", JSON.stringify(v));
+    } catch {}
+  };
+  const saveShopping = async v => {
+    setShopping(v);
+    try {
+      await window.storage.set("fh-shopping", JSON.stringify(v));
+    } catch {}
+  };
+  const savePrices = async v => {
+    setPrices(v);
+    try {
+      await window.storage.set("fh-prices", JSON.stringify(v));
+    } catch {}
+  };
+  const handleNameChange = val => {
+    setForm(f => ({
+      ...f,
+      name: val
+    }));
+    if (val.length < 1) {
+      setShowAuto(false);
+      return;
+    }
+    const matches = items.filter(i => i.name.toLowerCase().includes(val.toLowerCase()) && i.name.toLowerCase() !== val.toLowerCase());
+    setAutocomplete(matches);
+    setShowAuto(matches.length > 0);
+  };
+  const selectAutocomplete = item => {
+    setForm({
+      name: item.name,
+      category: item.category,
+      unit: item.unit,
+      min_stock: item.min_stock,
+      current_stock: item.current_stock
+    });
+    setShowAuto(false);
+  };
+  const updateStock = async (item, delta) => {
+    const newStock = Math.max(0, +(item.current_stock + delta).toFixed(2));
+    await saveItems(items.map(i => i.id === item.id ? {
+      ...i,
+      current_stock: newStock
+    } : i));
+  };
+  const quickDelete = async item => {
+    if (!confirm(`¿Eliminar "${item.name}"?`)) return;
+    await saveItems(items.filter(i => i.id !== item.id));
+    await saveShopping(shopping.filter(s => s.item_id !== item.id));
+    showToast("Eliminado");
+  };
+  const generateShoppingList = async () => {
+    const lowItems = items.filter(i => i.current_stock < i.min_stock);
+    if (!lowItems.length) {
+      showToast("¡Todo en orden! 🎉");
+      return;
+    }
+    const newEntries = lowItems.filter(item => !shopping.find(s => s.item_id === item.id && !s.checked)).map(item => ({
+      id: genId(),
+      item_id: item.id,
+      quantity_needed: Math.max(1, Math.ceil(item.min_stock - item.current_stock)),
+      checked: false
+    }));
+    await saveShopping([...shopping, ...newEntries]);
+    setTab("compra");
+    showToast(`${newEntries.length} productos añadidos 🛒`);
+  };
+  const toggleShoppingItem = async s => {
+    await saveShopping(shopping.map(x => x.id === s.id ? {
+      ...x,
+      checked: !x.checked
+    } : x));
+  };
+  const clearChecked = async () => {
+    await saveShopping(shopping.filter(s => !s.checked));
+    showToast("Lista limpiada ✓");
+  };
+  const parseImportText = text => {
+    const lines = text.split(/[\n,;]+/).map(l => l.trim()).filter(l => l.length > 2);
+    setImportParsed(lines);
+  };
+  const confirmImport = async () => {
+    if (!importParsed.length) return;
+    const newItems = [...items];
+    let added = 0;
+    for (const name of importParsed) {
+      if (!newItems.find(i => i.name.toLowerCase() === name.toLowerCase())) {
+        newItems.push({
+          id: genId(),
+          name,
+          category: "Otros",
+          unit: "ud",
+          min_stock: 1,
+          current_stock: 0
+        });
+        added++;
+      }
+    }
+    await saveItems(newItems);
+    setModal(null);
+    setImportText("");
+    setImportParsed([]);
+    showToast(`${added} productos añadidos ✓`);
+  };
+  const openAdd = () => {
+    setForm({
+      name: "",
+      category: "Otros",
+      unit: "ud",
+      min_stock: 1,
+      current_stock: 0
+    });
+    setShowAuto(false);
+    setModal({
+      mode: "add"
+    });
+  };
+  const openEdit = item => {
+    setForm({
+      name: item.name,
+      category: item.category,
+      unit: item.unit,
+      min_stock: item.min_stock,
+      current_stock: item.current_stock
+    });
+    setModal({
+      mode: "edit",
+      item
+    });
+  };
+  const saveItem = async () => {
+    if (!form.name.trim()) {
+      showToast("Pon un nombre");
+      return;
+    }
+    if (modal.mode === "add") {
+      await saveItems([...items, {
+        ...form,
+        id: genId(),
+        min_stock: +form.min_stock,
+        current_stock: +form.current_stock
+      }]);
+      showToast("Producto añadido ✓");
+    } else {
+      await saveItems(items.map(i => i.id === modal.item.id ? {
+        ...i,
+        ...form,
+        min_stock: +form.min_stock,
+        current_stock: +form.current_stock
+      } : i));
+      showToast("Guardado ✓");
+    }
+    setModal(null);
+    setShowAuto(false);
+  };
+  const deleteItem = async () => {
+    if (!confirm(`¿Eliminar "${modal.item.name}"?`)) return;
+    await saveItems(items.filter(i => i.id !== modal.item.id));
+    await saveShopping(shopping.filter(s => s.item_id !== modal.item.id));
+    setModal(null);
+    showToast("Eliminado");
+  };
+
+  // Ticket
+  const handleTicketTextChange = text => {
+    setTicketText(text);
+    const parsed = parseTicket(text);
+    setTicketParsed(parsed.map(p => ({
+      ...p,
+      id: genId()
+    })));
+  };
+  const updateTicketRow = (id, field, val) => {
+    setTicketParsed(prev => prev.map(r => r.id === id ? {
+      ...r,
+      [field]: val
+    } : r));
+  };
+  const removeTicketRow = id => setTicketParsed(prev => prev.filter(r => r.id !== id));
+  const addTicketRow = () => setTicketParsed(prev => [...prev, {
+    id: genId(),
+    name: "",
+    price: ""
+  }]);
+  const saveTicket = async () => {
+    const valid = ticketParsed.filter(ti => ti.name.trim() && ti.price && !isNaN(parseFloat(ti.price)));
+    if (!valid.length) {
+      showToast("Añade al menos un producto con precio");
+      return;
+    }
+    const today = new Date().toLocaleDateString("es-ES");
+    const newPrices = [...prices, ...valid.map(ti => ({
+      id: genId(),
+      productName: ti.name.trim(),
+      supermarket: ticketSupermarket,
+      price: parseFloat(ti.price),
+      date: today
+    }))];
+    await savePrices(newPrices);
+    setModal(null);
+    setTicketText("");
+    setTicketParsed([]);
+    showToast(`${valid.length} precios guardados ✓`);
+  };
+  const getPricesByProduct = () => {
+    const map = {};
+    for (const p of prices) {
+      const key = p.productName.toLowerCase();
+      if (!map[key]) map[key] = {
+        name: p.productName,
+        entries: []
+      };
+      map[key].entries.push(p);
+    }
+    return Object.values(map);
+  };
+  const filteredPriceProducts = getPricesByProduct().filter(p => !priceSearch || p.name.toLowerCase().includes(priceSearch.toLowerCase()));
+  const lowItems = items.filter(i => i.current_stock < i.min_stock);
+  const activeShop = shopping.filter(s => !s.checked);
+  const byCategory = CATEGORIES.reduce((acc, cat) => {
+    const ci = items.filter(i => i.category === cat);
+    if (ci.length) acc[cat] = ci;
+    return acc;
+  }, {});
+  const getItem = id => items.find(i => i.id === id);
+
+  // Devuelve el precio más barato para un nombre de producto
+  const getBestPrice = itemName => {
+    if (!itemName) return null;
+    const matches = prices.filter(p => p.productName.toLowerCase() === itemName.toLowerCase());
+    if (!matches.length) return null;
+    return matches.reduce((best, p) => p.price < best.price ? p : best);
+  };
+
+  // Agrupa lista de compra por supermercado usando precios memorizados
+  const getShoppingBySupermarket = () => {
+    const groups = {};
+    const noPrice = [];
+    for (const s of shopping.filter(x => !x.checked)) {
+      const item = getItem(s.item_id);
+      const best = item ? getBestPrice(item.name) : null;
+      if (best) {
+        if (!groups[best.supermarket]) groups[best.supermarket] = [];
+        groups[best.supermarket].push({
+          s,
+          item,
+          best
+        });
+      } else {
+        noPrice.push({
+          s,
+          item,
+          best: null
+        });
+      }
+    }
+    return {
+      groups,
+      noPrice
+    };
+  };
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("style", null, styles), /*#__PURE__*/React.createElement("div", {
+    className: "app"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "header"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "header-top"
+  }, /*#__PURE__*/React.createElement("h1", {
+    className: "app-title"
+  }, "Fresh", /*#__PURE__*/React.createElement("span", null, "Home")), /*#__PURE__*/React.createElement("div", {
+    className: "header-actions"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "btn-icon",
+    onClick: generateShoppingList
+  }, "\uD83D\uDED2"))), lowItems.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "alert-banner",
+    onClick: () => setTab("compra")
+  }, "\u26A0\uFE0F ", /*#__PURE__*/React.createElement("strong", null, lowItems.length, " bajo m\xEDnimo"), " \u2014 toca para ver"), /*#__PURE__*/React.createElement("div", {
+    className: "tabs"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: `tab ${tab === "despensa" ? "active" : ""}`,
+    onClick: () => setTab("despensa")
+  }, "\uD83C\uDFE0 Despensa"), /*#__PURE__*/React.createElement("button", {
+    className: `tab ${tab === "compra" ? "active" : ""}`,
+    onClick: () => setTab("compra")
+  }, "\uD83D\uDED2 Lista", activeShop.length > 0 ? ` (${activeShop.length})` : ""), /*#__PURE__*/React.createElement("button", {
+    className: `tab ${tab === "precios" ? "active" : ""}`,
+    onClick: () => setTab("precios")
+  }, "\uD83D\uDCB0 Precios"))), /*#__PURE__*/React.createElement("div", {
+    className: "content"
+  }, loading ? /*#__PURE__*/React.createElement("div", {
+    className: "loading"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "spinner"
+  }), /*#__PURE__*/React.createElement("span", null, "Cargando...")) : tab === "despensa" ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "despensa-actions"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "btn-import",
+    onClick: () => {
+      setImportText("");
+      setImportParsed([]);
+      setModal({
+        mode: "import"
+      });
+    }
+  }, "\uD83D\uDCCB Importar lista")), Object.keys(byCategory).length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "empty-state"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "empty-icon"
+  }, "\uD83E\uDD6C"), /*#__PURE__*/React.createElement("div", {
+    className: "empty-title"
+  }, "Despensa vac\xEDa"), /*#__PURE__*/React.createElement("div", {
+    className: "empty-sub"
+  }, "Pulsa ", /*#__PURE__*/React.createElement("strong", null, "+"), " para a\xF1adir o importa una lista")) : Object.entries(byCategory).map(_ref => {
+    let [cat, catItems] = _ref;
+    return /*#__PURE__*/React.createElement("div", {
+      className: "category-section",
+      key: cat
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "category-header"
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 17
+      }
+    }, CAT_ICONS[cat]), /*#__PURE__*/React.createElement("span", {
+      className: "category-name"
+    }, cat), /*#__PURE__*/React.createElement("span", {
+      className: "category-count"
+    }, catItems.length)), catItems.map(item => {
+      const pct = Math.min(100, item.current_stock / Math.max(item.min_stock, 0.01) * 100);
+      const isLow = item.current_stock < item.min_stock;
+      return /*#__PURE__*/React.createElement("div", {
+        key: item.id,
+        className: `item-card ${isLow ? "low" : "ok"}`
+      }, /*#__PURE__*/React.createElement("div", {
+        className: "item-top"
+      }, /*#__PURE__*/React.createElement("span", {
+        className: "item-name"
+      }, item.name), /*#__PURE__*/React.createElement("div", {
+        className: "item-badges"
+      }, /*#__PURE__*/React.createElement("span", {
+        className: `item-stock-badge ${isLow ? "badge-low" : "badge-ok"}`
+      }, isLow ? "⚠ Bajo" : "✓ OK"), /*#__PURE__*/React.createElement("button", {
+        className: "btn-quick-delete",
+        onClick: () => quickDelete(item)
+      }, "\u2715"))), /*#__PURE__*/React.createElement("div", {
+        className: "item-bottom"
+      }, /*#__PURE__*/React.createElement("div", {
+        className: "stock-bar-wrap"
+      }, /*#__PURE__*/React.createElement("div", {
+        className: `stock-bar ${isLow ? "bar-low" : "bar-ok"}`,
+        style: {
+          width: `${pct}%`
+        }
+      })), /*#__PURE__*/React.createElement("div", {
+        className: "stock-controls"
+      }, /*#__PURE__*/React.createElement("button", {
+        className: "btn-stock btn-minus",
+        onClick: () => updateStock(item, -1)
+      }, "\u2212"), /*#__PURE__*/React.createElement("span", {
+        className: "stock-value"
+      }, item.current_stock, " ", item.unit), /*#__PURE__*/React.createElement("button", {
+        className: "btn-stock btn-plus",
+        onClick: () => updateStock(item, 1)
+      }, "+")), /*#__PURE__*/React.createElement("button", {
+        className: "btn-edit-item",
+        onClick: () => openEdit(item)
+      }, "\u270F\uFE0F")));
+    }));
+  })) : tab === "compra" ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "shopping-header"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "shopping-title"
+  }, "Lista de la compra"), shopping.some(s => s.checked) && /*#__PURE__*/React.createElement("button", {
+    className: "btn-clear",
+    onClick: clearChecked
+  }, "Limpiar marcados")), /*#__PURE__*/React.createElement("button", {
+    className: "btn-gen",
+    onClick: generateShoppingList
+  }, "\u26A1 Generar desde productos bajos (", lowItems.length, ")"), shopping.filter(s => !s.checked).length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "shop-view-toggle"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: `shop-view-btn ${shopView === "lista" ? "active" : ""}`,
+    onClick: () => setShopView("lista")
+  }, "\uD83D\uDCCB Lista"), /*#__PURE__*/React.createElement("button", {
+    className: `shop-view-btn ${shopView === "supermercado" ? "active" : ""}`,
+    onClick: () => setShopView("supermercado")
+  }, "\uD83C\uDFEA Por supermercado")), shopping.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "empty-state"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "empty-icon"
+  }, "\uD83D\uDED2"), /*#__PURE__*/React.createElement("div", {
+    className: "empty-title"
+  }, "Lista vac\xEDa"), /*#__PURE__*/React.createElement("div", {
+    className: "empty-sub"
+  }, "Pulsa el bot\xF3n de arriba para generar la lista")) : shopView === "lista" ? shopping.map(s => {
+    const item = getItem(s.item_id);
+    const best = item ? getBestPrice(item.name) : null;
+    return /*#__PURE__*/React.createElement("div", {
+      key: s.id,
+      className: `shopping-item ${s.checked ? "checked" : ""}`
+    }, /*#__PURE__*/React.createElement("div", {
+      className: `shop-check ${s.checked ? "checked-box" : ""}`,
+      onClick: () => toggleShoppingItem(s)
+    }, s.checked && "✓"), /*#__PURE__*/React.createElement("div", {
+      className: "shop-info"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: `shop-name ${s.checked ? "crossed" : ""}`
+    }, item?.name || "Producto"), /*#__PURE__*/React.createElement("div", {
+      className: "shop-qty"
+    }, "Necesitas: ", s.quantity_needed, " ", item?.unit), !s.checked && item && (() => {
+        const liveBest = livePriceCache[item.name];
+        if (liveBest === undefined) { fetchLivePriceForItem(item.name); }
+        // Prefer live price over ticket price
+        const displayBest = liveBest || best;
+        return displayBest ? /*#__PURE__*/React.createElement("div", {className: "shop-live-price"},
+          /*#__PURE__*/React.createElement("span", {className: "shop-live-super"}, "\uD83C\uDFF7\uFE0F " + displayBest.supermarket),
+          /*#__PURE__*/React.createElement("span", {className: "shop-live-amount"}, displayBest.price.toFixed(2) + "\u20AC"),
+          displayBest.promo && /*#__PURE__*/React.createElement("span", {className: "shop-live-offer"}, displayBest.promo),
+          liveBest === undefined && /*#__PURE__*/React.createElement("span", {className: "shop-live-loading"}, "...")
+        ) : liveBest === undefined ? /*#__PURE__*/React.createElement("div", {className: "shop-live-price"},
+          /*#__PURE__*/React.createElement("span", {className: "shop-live-loading"}, "Buscando precio...")
+        ) : null;
+      })()), /*#__PURE__*/React.createElement("span", {
+      className: "shop-cat",
+      style: {
+        background: CAT_COLORS[item?.category] || "#f5f5f5"
+      }
+    }, CAT_ICONS[item?.category], " ", item?.category));
+  }) : (/* VISTA POR SUPERMERCADO */
+  (() => {
+    const {
+      groups,
+      noPrice
+    } = getShoppingBySupermarket();
+    const supermarkets = Object.keys(groups);
+    return /*#__PURE__*/React.createElement(React.Fragment, null, supermarkets.map(super_ => {
+      const groupItems = groups[super_];
+      const total = groupItems.reduce((sum, _ref2) => {
+        let {
+          s,
+          best
+        } = _ref2;
+        return sum + (best ? best.price * s.quantity_needed : 0);
+      }, 0);
+      return /*#__PURE__*/React.createElement("div", {
+        key: super_,
+        className: "super-group"
+      }, /*#__PURE__*/React.createElement("div", {
+        className: "super-group-header"
+      }, /*#__PURE__*/React.createElement("span", {
+        className: "super-group-name"
+      }, "\uD83C\uDFEA ", super_), /*#__PURE__*/React.createElement("span", {
+        className: "super-group-total"
+      }, "~", total.toFixed(2), "\u20AC")), groupItems.map(_ref3 => {
+        let {
+          s,
+          item,
+          best
+        } = _ref3;
+        return /*#__PURE__*/React.createElement("div", {
+          key: s.id,
+          className: "shopping-item",
+          style: {
+            marginBottom: 6
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          className: `shop-check ${s.checked ? "checked-box" : ""}`,
+          onClick: () => toggleShoppingItem(s)
+        }, s.checked && "✓"), /*#__PURE__*/React.createElement("div", {
+          className: "shop-info"
+        }, /*#__PURE__*/React.createElement("div", {
+          className: "shop-name"
+        }, item?.name || "Producto"), /*#__PURE__*/React.createElement("div", {
+          className: "shop-qty"
+        }, s.quantity_needed, " ", item?.unit, " \xB7 ", /*#__PURE__*/React.createElement("strong", {
+          style: {
+            color: "var(--green)"
+          }
+        }, best.price.toFixed(2), "\u20AC"))), /*#__PURE__*/React.createElement("span", {
+          className: "shop-cat",
+          style: {
+            background: CAT_COLORS[item?.category] || "#f5f5f5"
+          }
+        }, CAT_ICONS[item?.category]));
+      }));
+    }), noPrice.length > 0 && /*#__PURE__*/React.createElement("div", {
+      className: "super-group"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "super-group-header"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "super-group-name"
+    }, "\u2753 Sin precio memorizado")), noPrice.map(_ref4 => {
+      let {
+        s,
+        item
+      } = _ref4;
+      return /*#__PURE__*/React.createElement("div", {
+        key: s.id,
+        className: "shopping-item",
+        style: {
+          marginBottom: 6
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        className: `shop-check ${s.checked ? "checked-box" : ""}`,
+        onClick: () => toggleShoppingItem(s)
+      }, s.checked && "✓"), /*#__PURE__*/React.createElement("div", {
+        className: "shop-info"
+      }, /*#__PURE__*/React.createElement("div", {
+        className: "shop-name"
+      }, item?.name || "Producto"), /*#__PURE__*/React.createElement("div", {
+        className: "shop-qty"
+      }, s.quantity_needed, " ", item?.unit)), /*#__PURE__*/React.createElement("span", {
+        className: "shop-cat",
+        style: {
+          background: CAT_COLORS[item?.category] || "#f5f5f5"
+        }
+      }, CAT_ICONS[item?.category]));
+    })), supermarkets.length === 0 && noPrice.length === 0 && /*#__PURE__*/React.createElement("div", {
+      className: "empty-state",
+      style: {
+        padding: "24px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "empty-sub"
+    }, "A\xF1ade tiquets en \uD83D\uDCB0 Precios para ver recomendaciones")));
+  })())) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "prices-header"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "prices-title"
+  }, "Comparador de precios"), /*#__PURE__*/React.createElement("div", {
+    className: "live-search-wrap"
+  }, /*#__PURE__*/React.createElement("input", {
+    className: "price-search",
+    placeholder: "\uD83D\uDD0D Buscar en Ametller, Bon Preu, Mercadona...",
+    value: liveSearch,
+    onChange: e => { setLiveSearch(e.target.value); searchLive(e.target.value); }
+  }), liveLoading && /*#__PURE__*/React.createElement("div", {className: "live-loading"}, "Buscando precios..."),
+  liveResults.length > 0 && /*#__PURE__*/React.createElement("div", {className: "live-results"},
+    liveResults.map((r, i) => /*#__PURE__*/React.createElement("div", {key: i, className: "live-row"},
+      /*#__PURE__*/React.createElement("div", {className: "live-product"},
+        /*#__PURE__*/React.createElement("span", {className: "live-name"}, r.product),
+        r.promo && /*#__PURE__*/React.createElement("span", {className: "live-promo"}, "🏷️ " + r.promo)
+      ),
+      /*#__PURE__*/React.createElement("div", {className: "live-right"},
+        /*#__PURE__*/React.createElement("span", {className: "live-super " + (i === 0 ? "live-best" : "")}, r.supermarket),
+        /*#__PURE__*/React.createElement("span", {className: "live-price " + (i === 0 ? "live-best" : "")}, r.price.toFixed(2) + "\u20AC")
+      )
+    ))
+  )), /*#__PURE__*/React.createElement("div", {className: "prices-sep"}),
+  /*#__PURE__*/React.createElement("button", {
+    className: "btn-add-ticket",
+    onClick: () => {
+      setTicketText("");
+      setTicketParsed([]);
+      setModal({
+        mode: "ticket"
+      });
+    }
+  }, "\uD83E\uDDFE A\xF1adir tiquet de compra"), /*#__PURE__*/React.createElement("input", {
+    className: "price-search",
+    style: {marginTop: "8px"},
+    placeholder: "\uD83D\uDD0D Filtrar tiquets guardados...",
+    value: priceSearch,
+    onChange: e => setPriceSearch(e.target.value)
+  })), filteredPriceProducts.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "empty-state"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "empty-icon"
+  }, "\uD83D\uDCB0"), /*#__PURE__*/React.createElement("div", {
+    className: "empty-title"
+  }, "Sin precios a\xFAn"), /*#__PURE__*/React.createElement("div", {
+    className: "empty-sub"
+  }, "A\xF1ade tiquets para comparar", /*#__PURE__*/React.createElement("br", null), "precios entre supermercados")) : filteredPriceProducts.map(prod => {
+    const sorted = [...prod.entries].sort((a, b) => a.price - b.price);
+    return /*#__PURE__*/React.createElement("div", {
+      key: prod.name,
+      className: "price-product"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "price-product-name"
+    }, prod.name), sorted.map((entry, i) => /*#__PURE__*/React.createElement("div", {
+      key: entry.id,
+      className: "price-row"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "price-supermarket"
+    }, entry.supermarket), /*#__PURE__*/React.createElement("span", {
+      className: "price-date"
+    }, entry.date), /*#__PURE__*/React.createElement("div", {
+      className: "price-right"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: `price-amount ${i === 0 ? "best" : "worst"}`
+    }, entry.price.toFixed(2), "\u20AC"), i === 0 && /*#__PURE__*/React.createElement("span", {
+      className: "price-badge-best"
+    }, "\u2713 mejor")))));
+  }))), tab === "despensa" && /*#__PURE__*/React.createElement("button", {
+    className: "fab",
+    onClick: openAdd
+  }, "+"), modal && /*#__PURE__*/React.createElement("div", {
+    className: "modal-overlay",
+    onClick: e => e.target === e.currentTarget && setModal(null)
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal"
+  }, (modal.mode === "add" || modal.mode === "edit") && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "modal-title"
+  }, modal.mode === "add" ? "Añadir producto" : "Editar producto"), /*#__PURE__*/React.createElement("div", {
+    className: "form-group"
+  }, /*#__PURE__*/React.createElement("label", {
+    className: "form-label"
+  }, "Nombre"), /*#__PURE__*/React.createElement("input", {
+    className: "form-input",
+    value: form.name,
+    onChange: e => handleNameChange(e.target.value),
+    placeholder: "Ej: Leche entera",
+    autoFocus: true,
+    autoComplete: "off"
+  }), showAuto && /*#__PURE__*/React.createElement("div", {
+    className: "autocomplete-list"
+  }, autocomplete.map(item => /*#__PURE__*/React.createElement("div", {
+    key: item.id,
+    className: "autocomplete-item",
+    onClick: () => selectAutocomplete(item)
+  }, /*#__PURE__*/React.createElement("span", null, CAT_ICONS[item.category]), /*#__PURE__*/React.createElement("span", null, item.name), /*#__PURE__*/React.createElement("span", {
+    style: {
+      marginLeft: "auto",
+      fontSize: 11,
+      color: "var(--text-soft)"
+    }
+  }, item.category))))), /*#__PURE__*/React.createElement("div", {
+    className: "form-group"
+  }, /*#__PURE__*/React.createElement("label", {
+    className: "form-label"
+  }, "Categor\xEDa"), /*#__PURE__*/React.createElement("select", {
+    className: "form-select",
+    value: form.category,
+    onChange: e => setForm(f => ({
+      ...f,
+      category: e.target.value
+    }))
+  }, CATEGORIES.map(c => /*#__PURE__*/React.createElement("option", {
+    key: c,
+    value: c
+  }, CAT_ICONS[c], " ", c)))), /*#__PURE__*/React.createElement("div", {
+    className: "form-row"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "form-group"
+  }, /*#__PURE__*/React.createElement("label", {
+    className: "form-label"
+  }, "Unidad"), /*#__PURE__*/React.createElement("select", {
+    className: "form-select",
+    value: form.unit,
+    onChange: e => setForm(f => ({
+      ...f,
+      unit: e.target.value
+    }))
+  }, ["ud", "L", "kg", "g", "ml", "paq", "brik"].map(u => /*#__PURE__*/React.createElement("option", {
+    key: u
+  }, u)))), /*#__PURE__*/React.createElement("div", {
+    className: "form-group"
+  }, /*#__PURE__*/React.createElement("label", {
+    className: "form-label"
+  }, "Stock m\xEDnimo"), /*#__PURE__*/React.createElement("input", {
+    className: "form-input",
+    type: "number",
+    min: "0",
+    step: "0.5",
+    value: form.min_stock,
+    onChange: e => setForm(f => ({
+      ...f,
+      min_stock: e.target.value
+    }))
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "form-group"
+  }, /*#__PURE__*/React.createElement("label", {
+    className: "form-label"
+  }, "Stock actual"), /*#__PURE__*/React.createElement("input", {
+    className: "form-input",
+    type: "number",
+    min: "0",
+    step: "0.5",
+    value: form.current_stock,
+    onChange: e => setForm(f => ({
+      ...f,
+      current_stock: e.target.value
+    }))
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "modal-actions"
+  }, modal.mode === "edit" && /*#__PURE__*/React.createElement("button", {
+    className: "btn-delete",
+    onClick: deleteItem
+  }, "\uD83D\uDDD1"), /*#__PURE__*/React.createElement("button", {
+    className: "btn-cancel",
+    onClick: () => {
+      setModal(null);
+      setShowAuto(false);
+    }
+  }, "Cancelar"), /*#__PURE__*/React.createElement("button", {
+    className: "btn-save",
+    onClick: saveItem
+  }, "Guardar"))), modal.mode === "import" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "modal-title"
+  }, "Importar lista"), /*#__PURE__*/React.createElement("p", {
+    className: "modal-hint"
+  }, "Pega una lista desde Notas, WhatsApp o donde sea. Separa por l\xEDneas, comas o punto y coma."), /*#__PURE__*/React.createElement("div", {
+    className: "form-group"
+  }, /*#__PURE__*/React.createElement("textarea", {
+    className: "form-textarea",
+    placeholder: "Leche\nArroz\nDetergente\nPan de molde...",
+    value: importText,
+    onChange: e => {
+      setImportText(e.target.value);
+      parseImportText(e.target.value);
+    },
+    autoFocus: true
+  })), importParsed.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "import-parsed"
+  }, /*#__PURE__*/React.createElement("strong", null, importParsed.length, " productos detectados:"), /*#__PURE__*/React.createElement("br", null), importParsed.join(" · ")), /*#__PURE__*/React.createElement("div", {
+    className: "modal-actions"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "btn-cancel",
+    onClick: () => setModal(null)
+  }, "Cancelar"), /*#__PURE__*/React.createElement("button", {
+    className: "btn-save",
+    onClick: confirmImport,
+    disabled: !importParsed.length
+  }, "A\xF1adir ", importParsed.length > 0 ? `(${importParsed.length})` : ""))), modal.mode === "ticket" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "modal-title"
+  }, "A\xF1adir tiquet"), /*#__PURE__*/React.createElement("div", {
+    className: "form-group"
+  }, /*#__PURE__*/React.createElement("label", {
+    className: "form-label"
+  }, "Supermercado"), /*#__PURE__*/React.createElement("select", {
+    className: "form-select",
+    value: ticketSupermarket,
+    onChange: e => setTicketSupermarket(e.target.value)
+  }, SUPERMARKETS.map(s => /*#__PURE__*/React.createElement("option", {
+    key: s
+  }, s)))), /*#__PURE__*/React.createElement("div", {
+    className: "form-group"
+  }, /*#__PURE__*/React.createElement("label", {
+    className: "form-label"
+  }, "\uD83D\uDCF7 Foto del tiquet"), /*#__PURE__*/React.createElement("label", {
+      className: "btn-photo-upload",
+      title: "Subir foto del tiquet"
+    }, photoLoading ? "Analizando foto..." : "\uD83D\uDCF7 Subir foto del tiquet",
+    !photoLoading && /*#__PURE__*/React.createElement("input", {
+      type: "file",
+      accept: "image/*",
+      capture: "environment",
+      style: {display: "none"},
+      onChange: e => { if (e.target.files[0]) analyzePhoto(e.target.files[0]); }
+    })
+  ), /*#__PURE__*/React.createElement("div", {className: "photo-or"}, "\u2014 o pega el texto \u2014"),
+  /*#__PURE__*/React.createElement("label", {className: "form-label"}, "Pega el texto del tiquet aqu\xED"), /*#__PURE__*/React.createElement("p", {
+    className: "modal-hint"
+  }, "Funciona con bon\xC0rea, Mercadona y la mayor\xEDa de supermercados. Los productos se detectan autom\xE1ticamente."), /*#__PURE__*/React.createElement("textarea", {
+    className: "form-textarea",
+    placeholder: "ACEITUN CHUPADEDOS 850ML   4,75  10,0\nFUET EXTRA DUO   4,28  10,0\nQUESO BRIE BONAREA 200G   1,80  4,0",
+    value: ticketText,
+    onChange: e => handleTicketTextChange(e.target.value),
+    autoFocus: true
+  })), ticketParsed.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
+    className: "parse-count"
+  }, "\u2713 ", ticketParsed.length, " productos detectados \u2014 revisa y edita si hace falta:"), /*#__PURE__*/React.createElement("div", {
+    className: "parsed-preview"
+  }, ticketParsed.map(row => /*#__PURE__*/React.createElement("div", {
+    key: row.id,
+    className: "parsed-row"
+  }, /*#__PURE__*/React.createElement("input", {
+    className: "parsed-name",
+    value: row.name,
+    onChange: e => updateTicketRow(row.id, "name", e.target.value),
+    placeholder: "Producto"
+  }), /*#__PURE__*/React.createElement("input", {
+    className: "parsed-price",
+    value: row.price,
+    onChange: e => updateTicketRow(row.id, "price", e.target.value),
+    placeholder: "\u20AC",
+    type: "number",
+    step: "0.01",
+    min: "0"
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "btn-remove-row",
+    onClick: () => removeTicketRow(row.id)
+  }, "\u2715"))))), ticketParsed.length === 0 && ticketText.length === 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "section-sep"
+  }), /*#__PURE__*/React.createElement("p", {
+    className: "modal-hint"
+  }, "O a\xF1ade productos manualmente:"), /*#__PURE__*/React.createElement("div", {
+    className: "parsed-preview",
+    style: {
+      background: "white",
+      padding: 0
+    }
+  }, [{
+    id: "manual",
+    name: "",
+    price: ""
+  }].map(row => /*#__PURE__*/React.createElement("div", {
+    key: row.id,
+    className: "parsed-row"
+  }, /*#__PURE__*/React.createElement("input", {
+    className: "parsed-name",
+    placeholder: "Producto"
+  }), /*#__PURE__*/React.createElement("input", {
+    className: "parsed-price",
+    placeholder: "\u20AC",
+    type: "number",
+    step: "0.01"
+  }))))), /*#__PURE__*/React.createElement("button", {
+    className: "btn-add-row",
+    onClick: addTicketRow
+  }, "+ A\xF1adir l\xEDnea manual"), /*#__PURE__*/React.createElement("div", {
+    className: "modal-actions"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "btn-cancel",
+    onClick: () => setModal(null)
+  }, "Cancelar"), /*#__PURE__*/React.createElement("button", {
+    className: "btn-save",
+    onClick: saveTicket
+  }, "Guardar tiquet"))))), toast && /*#__PURE__*/React.createElement("div", {
+    className: "toast"
+  }, toast)));
+}
+
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(FreshHome));
+  </script>
+</body>
+</html>
